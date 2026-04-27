@@ -1,0 +1,32 @@
+# configs/r8.yaml — R=8 acceleration — v3
+
+data_root:    /scratch/ks8413/mri_diffusion/data/calgary-campinas_version-1.0/CC359/Raw-data/Single-channel
+output_dir:   /scratch/ks8413/mri_diffusion/runs/r8_v3
+acceleration: 8
+mask_type:    random
+center_fraction: 0.08
+
+# Model
+base_channels:  64
+channel_mults:  [1, 2, 4, 8]
+time_embed_dim: 128
+T:              1000
+schedule:       cosine
+
+# Training
+epochs:              200
+batch_size:          16
+lr:                  0.0001
+num_workers:         8
+checkpoint_interval: 25
+
+# SSIM/PSNR eval every N epochs
+ssim_eval_interval:  10
+ssim_eval_batches:   10
+
+# Adaptive stopping thresholds (R=8 — slightly relaxed)
+noise_threshold:      0.025
+x0_change_threshold:  0.008
+kspace_threshold:     0.08
+min_steps:            10
+patience:             3
