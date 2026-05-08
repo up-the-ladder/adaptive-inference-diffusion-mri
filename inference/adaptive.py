@@ -1,24 +1,11 @@
 """
 inference/adaptive.py
----------------------
-Adaptive stopping for diffusion-based MRI reconstruction.
 
-APPROACH: Adaptive DDIM with relative x0 change stopping.
-
-Uses DDIM (eta=0, deterministic) instead of stochastic DDPM:
+Here we are using DDIM (eta=0, deterministic) instead of stochastic DDPM:
   - x0_pred converges monotonically in DDIM
   - No noise injection means x0_pred trajectory is smooth
   - Early stopping is meaningful because reconstruction quality
     improves consistently step by step
-
-STOPPING CRITERION — Relative x0 Prediction Change:
-
-    delta_t = || x0_pred_t - x0_pred_{t-1} || / (|| x0_pred_{t-1} || + eps)
-
-At step min_steps, record baseline d0 = delta_{min_steps}.
-
-Stop when:
-    smooth(delta_t) < relative_threshold * d0
 
 WHY DDIM NOT DDPM:
   - DDPM adds stochastic noise at each step → x0_pred oscillates
