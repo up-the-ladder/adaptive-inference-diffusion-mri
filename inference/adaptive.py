@@ -1,7 +1,5 @@
 """
-inference/adaptive.py
-
-Here we are using DDIM (eta=0, deterministic) instead of stochastic DDPM:
+We are using DDIM (eta=0, deterministic) instead of stochastic DDPM:
   - x0_pred converges monotonically in DDIM
   - No noise injection means x0_pred trajectory is smooth
   - Early stopping is meaningful because reconstruction quality
