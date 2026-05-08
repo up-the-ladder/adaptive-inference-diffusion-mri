@@ -1,17 +1,3 @@
-"""
-data/masks.py
--------------
-K-space undersampling masks for simulating accelerated MRI acquisition.
-
-Three mask types:
-  - random:           uniformly random phase-encode lines
-  - radial:           radial spokes through k-space center
-  - variable_density: higher density near center (where most signal is)
-
-All masks always keep the center fraction of k-space (low frequencies)
-because the center contains most of the image energy/contrast.
-"""
-
 import numpy as np
 from typing import Tuple
 
