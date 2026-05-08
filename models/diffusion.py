@@ -1,17 +1,3 @@
-"""
-models/diffusion.py
--------------------
-DDPM for MRI reconstruction.
-
-Forward process: q(x_t | x_0) — adds Gaussian noise to clean image
-Reverse process: p_theta(x_{t-1} | x_t) — denoises using U-Net
-
-Two reverse-step variants:
-  p_sample_step    — standard DDPM step (used during training eval)
-  p_sample_step_dc — DDPM step + data consistency projection onto
-                     observed k-space measurements (used at inference)
-"""
-
 import torch
 import torch.nn as nn
 import numpy as np
