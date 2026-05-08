@@ -1,22 +1,3 @@
-"""
-data/dataset.py
----------------
-Calgary-Campinas Single-channel dataset loader.
-
-Each .npy file contains one subject's brain MRI k-space data.
-Shape: (170, 256, 256, 2) — 170 slices, 256x256, [real, imaginary]
-
-Returns 4 tensors per sample:
-  - undersampled_image:  aliased image from masked k-space  (1, H, W)
-  - target_image:        clean ground truth image           (1, H, W)
-  - mask:                binary k-space mask                (1, H, W)
-  - observed_kspace:     raw masked complex k-space         (2, H, W) [real, imag]
-
-FIX v3: Mask seed is randomized per epoch to prevent the model from
-memorizing fixed mask patterns per slice. Call set_epoch(epoch) from
-the training loop each epoch.
-"""
-
 import os
 import numpy as np
 import torch
