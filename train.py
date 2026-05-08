@@ -1,23 +1,3 @@
-"""
-train.py
---------
-Training script for diffusion-based MRI reconstruction.
-
-v3 fixes:
-  - Calls train_dataset.set_epoch(epoch) each epoch so mask seed
-    varies — prevents memorization of fixed mask+slice patterns.
-  - Adds SSIM/PSNR validation every 10 epochs using a small number
-    of full reverse diffusion passes (DDIM-50) so we can track
-    actual reconstruction quality, not just noise-prediction MSE.
-  - Val SSIM/PSNR logged to training_log.csv and loss_curve.png.
-  - best.pt now saved on best val_ssim (not best val_loss).
-
-Usage:
-    python train.py --config configs/r4.yaml
-    python train.py --config configs/r4.yaml \\
-        --resume /scratch/ks8413/mri_diffusion/runs/r4_v3/latest.pt
-"""
-
 import os
 import csv
 import argparse
