@@ -1,28 +1,3 @@
-"""
-evaluate.py — v3
-----------------
-Evaluation: fixed-step baselines vs. adaptive stopping (no DC).
-
-Methods compared:
-  ddim_100   — DDIM 100 steps, no DC (upper quality reference)
-  ddim_50    — DDIM 50 steps, no DC  (practical baseline)
-  ddim_25    — DDIM 25 steps, no DC  (faster baseline)
-  adaptive   — Adaptive DDIM stopping, no DC (our contribution)
-
-Outputs saved to output_dir/eval_results/:
-  results.json, metrics_table.txt,
-  metrics_comparison.png, quality_vs_steps.png,
-  step_distribution.png, metrics_boxplot.png,
-  reconstructions/ — per-slice 4-panel figures
-
-Usage:
-    python evaluate.py \\
-        --checkpoint /scratch/ks8413/mri_diffusion/runs/r4_v3/best_ssim.pt \\
-        --config configs/r4.yaml \\
-        --eval_batches 50 \\
-        --save_images 20
-"""
-
 import os
 import json
 import argparse
@@ -241,6 +216,8 @@ def evaluate(cfg, checkpoint_path, eval_batches, save_images):
     _plot_quality_vs_steps(results, eval_dir)
     _plot_step_distribution(results["adaptive"]["steps"], eval_dir, 100)
     _plot_boxplots(results, eval_dir)
+    _plot_per_sample_scatter(results, eval_dir)
+    _save_per_sample_data(results, eval_dir)
 
     print(f"\nAll outputs saved to: {eval_dir}/")
     return results
@@ -333,6 +310,174 @@ def _plot_boxplots(results, out_dir):
         ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(out_dir, "metrics_boxplot.png"), dpi=150); plt.close()
+
+
+def _plot_per_sample_scatter(results, out_dir):
+    """
+    Three plots answering Professor Rajesh and TA Nhi's questions.
+
+    Plot 1 (Rajesh): Step distribution histogram — proves different samples
+                     stop at different steps (spread = per-sample adaptation)
+
+    Plot 2 (Nhi #1): SSIM vs steps scatter — tight band = dependable,
+                     broad scatter = not dependable
+
+    Plot 3 (Nhi #2): Lower bound curve — at X steps budget, what is the
+                     minimum SSIM adaptive achieves? Shows reliability floor.
+    """
+    adaptive = results["adaptive"]
+    steps    = np.array(adaptive["steps"], dtype=float)
+    ssims    = np.array(adaptive["ssim"])
+    ddim100_ssim = np.mean(results["ddim_100"]["ssim"])
+    ddim50_ssim  = np.mean(results["ddim_50"]["ssim"])
+    ddim25_ssim  = np.mean(results["ddim_25"]["ssim"])
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig.suptitle("Adaptive stopping — dependability analysis", fontsize=13, fontweight="bold")
+
+    # ── Plot 1: Step distribution histogram (for Professor Rajesh) ─────────
+    ax = axes[0]
+    ax.hist(steps, bins=30, color="#2171b5", edgecolor="black", alpha=0.75)
+    ax.axvline(np.mean(steps),   color="red",    linestyle="--", linewidth=1.5,
+               label=f"Mean: {np.mean(steps):.1f}")
+    ax.axvline(np.median(steps), color="orange", linestyle="--", linewidth=1.5,
+               label=f"Median: {np.median(steps):.1f}")
+    ax.axvline(100, color="gray", linestyle=":", linewidth=1.5,
+               label="Max (100 steps)")
+    ax.set_xlabel("Steps used per sample", fontsize=11)
+    ax.set_ylabel("Number of samples", fontsize=11)
+    ax.set_title("Do different samples stop\nat different steps?", fontsize=11, fontweight="bold")
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
+    # annotation
+    ax.text(0.05, 0.92, f"Range: {int(np.min(steps))}–{int(np.max(steps))} steps\nStd: {np.std(steps):.1f}",
+            transform=ax.transAxes, fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    # ── Plot 2: SSIM vs steps scatter (for TA — thin vs broad) ────────────
+    ax2 = axes[1]
+    ax2.scatter(steps, ssims, alpha=0.5, s=30, color="#2171b5",
+                edgecolors="none", label="Per-sample adaptive")
+    ax2.axhline(ddim100_ssim, color="#555555", linestyle="--", linewidth=1.5,
+                label=f"DDIM-100 mean ({ddim100_ssim:.3f})")
+    ax2.axhline(ddim50_ssim,  color="#f0a500", linestyle="--", linewidth=1.5,
+                label=f"DDIM-50 mean ({ddim50_ssim:.3f})")
+    ax2.axhline(np.mean(ssims), color="#d62728", linestyle="-", linewidth=1.5,
+                label=f"Adaptive mean ({np.mean(ssims):.3f})")
+    # shaded band showing ± 1 std
+    ax2.axhspan(np.mean(ssims) - np.std(ssims),
+                np.mean(ssims) + np.std(ssims),
+                alpha=0.1, color="#d62728", label=f"±1 std ({np.std(ssims):.3f})")
+    ax2.set_xlabel("Steps used by adaptive", fontsize=11)
+    ax2.set_ylabel("SSIM", fontsize=11)
+    ax2.set_title("Is quality consistent regardless\nof steps? (tight = dependable)", fontsize=11, fontweight="bold")
+    ax2.legend(fontsize=8)
+    ax2.grid(alpha=0.3)
+
+    # ── Plot 3: Lower bound curve (for TA — reliability floor) ────────────
+    ax3 = axes[2]
+
+    # Sort samples by steps used
+    sort_idx    = np.argsort(steps)
+    sorted_steps = steps[sort_idx]
+    sorted_ssims = ssims[sort_idx]
+
+    # Compute running statistics as we include more steps in budget
+    step_budgets = np.arange(int(np.min(steps)), 101, 1)
+    mean_ssim_at_budget   = []
+    lower_bound_at_budget = []   # 10th percentile
+    n_samples_at_budget   = []
+
+    for budget in step_budgets:
+        # samples that stopped AT OR BEFORE this budget
+        mask = sorted_steps <= budget
+        if mask.sum() > 0:
+            ssims_here = sorted_ssims[mask]
+            mean_ssim_at_budget.append(np.mean(ssims_here))
+            lower_bound_at_budget.append(np.percentile(ssims_here, 10))
+            n_samples_at_budget.append(mask.sum())
+        else:
+            mean_ssim_at_budget.append(np.nan)
+            lower_bound_at_budget.append(np.nan)
+            n_samples_at_budget.append(0)
+
+    mean_ssim_at_budget   = np.array(mean_ssim_at_budget)
+    lower_bound_at_budget = np.array(lower_bound_at_budget)
+
+    ax3.plot(step_budgets, mean_ssim_at_budget, color="#2171b5", linewidth=2,
+             label="Mean SSIM")
+    ax3.plot(step_budgets, lower_bound_at_budget, color="#d62728", linewidth=2,
+             linestyle="--", label="Lower bound (10th percentile)")
+    ax3.fill_between(step_budgets, lower_bound_at_budget, mean_ssim_at_budget,
+                     alpha=0.15, color="#2171b5")
+
+    # Reference lines
+    ax3.axhline(ddim100_ssim, color="#555555", linestyle=":", linewidth=1.2,
+                label=f"DDIM-100 ({ddim100_ssim:.3f})")
+    ax3.axhline(ddim50_ssim,  color="#f0a500", linestyle=":", linewidth=1.2,
+                label=f"DDIM-50 ({ddim50_ssim:.3f})")
+
+    ax3.set_xlabel("Step budget", fontsize=11)
+    ax3.set_ylabel("SSIM", fontsize=11)
+    ax3.set_title("Lower bound — minimum SSIM\nat each step budget", fontsize=11, fontweight="bold")
+    ax3.legend(fontsize=8)
+    ax3.grid(alpha=0.3)
+    ax3.set_xlim(int(np.min(steps)) - 2, 102)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "per_sample_scatter.png"), dpi=150, bbox_inches="tight")
+    plt.close()
+    print("  Saved: per_sample_scatter.png")
+
+
+def _save_per_sample_data(results, out_dir):
+    """
+    Save per-sample SSIM, PSNR, NMSE, steps for all methods.
+    Useful for custom analysis and answering professor/TA questions.
+    """
+    per_sample = {}
+    for method, r in results.items():
+        if method == "_meta":
+            continue
+        per_sample[method] = {
+            "ssim":  r["ssim"],
+            "psnr":  r["psnr"],
+            "nmse":  r["nmse"],
+            "steps": r["steps"],
+        }
+
+    # Summary stats for adaptive
+    adap = results["adaptive"]
+    steps = np.array(adap["steps"])
+    ssims = np.array(adap["ssim"])
+
+    per_sample["_adaptive_summary"] = {
+        "steps_mean":   float(np.mean(steps)),
+        "steps_median": float(np.median(steps)),
+        "steps_min":    float(np.min(steps)),
+        "steps_max":    float(np.max(steps)),
+        "steps_std":    float(np.std(steps)),
+        "ssim_mean":    float(np.mean(ssims)),
+        "ssim_std":     float(np.std(ssims)),
+        "ssim_min":     float(np.min(ssims)),
+        "ssim_max":     float(np.max(ssims)),
+        "n_stopped_early": int(np.sum(steps < 100)),
+        "n_used_all":      int(np.sum(steps == 100)),
+        "pct_stopped_early": float(np.mean(steps < 100) * 100),
+    }
+
+    path = os.path.join(out_dir, "per_sample_data.json")
+    with open(path, "w") as f:
+        json.dump(per_sample, f, indent=2)
+    print(f"  Saved: per_sample_data.json")
+    print(f"\n  Adaptive per-sample summary:")
+    s = per_sample["_adaptive_summary"]
+    print(f"    Steps: mean={s['steps_mean']:.1f}  median={s['steps_median']:.1f}  "
+          f"min={s['steps_min']:.0f}  max={s['steps_max']:.0f}  std={s['steps_std']:.1f}")
+    print(f"    SSIM:  mean={s['ssim_mean']:.4f}  std={s['ssim_std']:.4f}  "
+          f"min={s['ssim_min']:.4f}  max={s['ssim_max']:.4f}")
+    print(f"    Stopped early: {s['n_stopped_early']}/{s['n_stopped_early']+s['n_used_all']} "
+          f"samples ({s['pct_stopped_early']:.1f}%)")
 
 
 if __name__ == "__main__":
