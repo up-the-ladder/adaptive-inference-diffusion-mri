@@ -1,15 +1,5 @@
 """
-models/unet.py
---------------
 U-Net backbone for the diffusion model.
-
-Architecture:
-  - Encoder: 4 downsampling blocks (Conv + GroupNorm + SiLU)
-  - Bottleneck: 2 residual blocks with self-attention
-  - Decoder: 4 upsampling blocks with skip connections
-  - Time embedding: sinusoidal → MLP injected at each block
-  - Conditioning: undersampled image concatenated to input (channel dim)
-
 Input:  (B, 2, H, W) — noisy image + undersampled image concatenated
 Output: (B, 1, H, W) — predicted noise at current step
 """
