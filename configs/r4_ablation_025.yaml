@@ -1,0 +1,33 @@
+# configs/r4.yaml — R=4 acceleration — v3
+
+data_root:    /scratch/ks8413/mri_diffusion/data/calgary-campinas_version-1.0/CC359/Raw-data/Single-channel
+output_dir: /scratch/ks8413/mri_diffusion/runs/r4_ablation_025
+acceleration: 4
+mask_type:    random
+center_fraction: 0.08
+
+# Model
+base_channels:  64
+channel_mults:  [1, 2, 4, 8]
+time_embed_dim: 128
+T:              1000
+schedule:       cosine
+
+# Training
+epochs:              200
+batch_size:          16
+lr:                  0.0001
+num_workers:         8
+checkpoint_interval: 25
+
+# SSIM/PSNR eval every N epochs (runs DDIM-50 on ssim_eval_batches val batches)
+ssim_eval_interval:  10
+ssim_eval_batches:   10
+
+# Adaptive stopping — relative x0 change on DDIM (deterministic)
+# DDIM used instead of DDPM so x0_pred converges smoothly
+# relative_threshold=0.5: stop when delta is 50% of baseline
+relative_threshold: 0.25
+min_steps:          30
+patience:           3
+window_size:        3
